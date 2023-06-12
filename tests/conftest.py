@@ -41,6 +41,7 @@ from testing.connectors import multi_connector
 from testing.connectors import redis_connector
 from testing.connectors import ucx_connector
 from testing.connectors import zmq_connector
+from testing.connectors import kafka_connector
 from testing.endpoint import endpoint
 from testing.relay_server import relay_server
 from testing.stores import store

@@ -19,6 +19,7 @@ from proxystore.connectors import globus
 from proxystore.connectors import local
 from proxystore.connectors import multi
 from proxystore.connectors import redis
+from proxystore.connectors.kafka import KafkaConnector
 from proxystore.connectors.connector import Connector
 from proxystore.connectors.dim import margo
 from proxystore.connectors.dim import ucx
@@ -44,6 +45,7 @@ FIXTURE_LIST = [
     'margo_connector',
     'ucx_connector',
     'zmq_connector',
+    'kafka_connector'
 ]
 MOCK_REDIS_CACHE: dict[str, Any] = {}
 
@@ -220,6 +222,13 @@ def zmq_connector() -> Generator[Connector[Any], None, None]:
     ) as connector:
         yield connector
 
+@pytest.fixture(scope='session')
+def kafka_connector() -> Generator[Connector[Any], None, None]:
+    """KafkaConnector fixture."""
+    kafka_host = 'localhost'
+    kafka_port = 9092
+    with KafkaConnector(kafka_host, kafka_port) as connector:
+        yield connector
 
 @pytest.fixture(scope='session', params=FIXTURE_LIST)
 def connectors(request) -> Generator[Connector[Any], None, None]:
