@@ -116,3 +116,14 @@ class Connector(Protocol[KeyT]):
             retrieve the objects.
         """
         ...
+
+    def append(self, key: KeyT, obj: bytes) -> None:
+        """Appends the value of the object to a stream 
+        (maybe)
+        Can be used to update the value of the proxy if made mutable
+        
+        Args:   
+            key: Key to the proxy returned by the .proxy() method
+            obj: The serialized object that need to be put in store
+        """
+        ...

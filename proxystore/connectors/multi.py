@@ -457,3 +457,6 @@ class MultiConnector:
             self.put(obj, subset_tags=subset_tags, superset_tags=superset_tags)
             for obj in objs
         ]
+
+    def append(self, key: MultiKey, obj: bytes) -> None:
+        raise NotImplementedError

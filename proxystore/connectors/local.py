@@ -148,3 +148,6 @@ class LocalConnector:
             retrieve the objects.
         """
         return [self.put(obj) for obj in objs]
+
+    def append(self, key: LocalKey, obj: bytes) -> None:
+        raise NotImplementedError

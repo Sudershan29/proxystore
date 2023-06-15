@@ -170,3 +170,6 @@ class RedisConnector:
             {key.redis_key: obj for key, obj in zip(keys, objs)},
         )
         return keys
+
+    def append(self, key: RedisKey, obj: bytes) -> None:
+        raise NotImplementedError

@@ -30,7 +30,7 @@ else:  # pragma: <3.11 cover
 import proxystore
 import proxystore.serialize
 from proxystore.connectors.connector import Connector
-from proxystore.proxy import Proxy
+from proxystore.proxy import Proxy, StreamingProxy
 from proxystore.proxy import ProxyLocker
 from proxystore.store.cache import LRUCache
 from proxystore.store.exceptions import NonProxiableTypeError
@@ -175,6 +175,41 @@ class StoreFactory(Generic[ConnectorT, T]):
         logger.debug(f'Starting asynchronous resolve of {self.key}')
         self._obj_future = _default_pool.submit(self.resolve)
 
+class StreamingFactory(StoreFactory, Generic[ConnectorT, T]):
+    def resolve(self) -> T:
+        """Get object associated with key from store.
+
+        Raises:
+            ProxyResolveMissingKeyError: If the key associated with this
+                factory does not exist in the store.
+        """
+        with Timer() as timer:
+            store = self.get_store()
+            obj = store.get(
+                self.key,
+                deserializer=self.deserializer,
+                default=_MISSING_OBJECT,
+                should_cache=False
+            )
+
+            # TODO: Need to decide if the store should have a generator ?
+
+            if obj is _MISSING_OBJECT:
+                obj = None
+            #     raise ProxyResolveMissingKeyError(
+            #         self.key,
+            #         type(store),
+            #         store.name,
+            #     )
+
+            if self.evict:
+                store.evict(self.key)
+
+        if store.metrics is not None:
+            total_time = timer.elapsed_ns
+            store.metrics.add_time('factory.resolve', self.key, total_time)
+
+        return cast(T, obj)
 
 class Store(Generic[ConnectorT]):
     """Key-value store interface for proxies.
@@ -396,6 +431,7 @@ class Store(Generic[ConnectorT]):
         *,
         deserializer: DeserializerT | None = None,
         default: object | None = None,
+        should_cache: bool = True
     ) -> Any | None:
         """Get the object associated with the key.
 
@@ -451,7 +487,8 @@ class Store(Generic[ConnectorT]):
                     obj_size,
                 )
 
-            self.cache.set(key, result)
+            if should_cache:
+                self.cache.set(key, result)
         else:
             result = default
 
@@ -571,6 +608,88 @@ class Store(Generic[ConnectorT]):
             f'{timer.elapsed_ms:.3f} ms',
         )
         return proxy
+
+    def new_stream(
+        self,
+        obj: T | NonProxiableT,
+        *,
+        evict: bool = False,
+        serializer: SerializerT | None = None,
+        deserializer: DeserializerT | None = None,
+        skip_nonproxiable: bool = False,
+        **kwargs: Any,
+    ) -> Proxy[T] | NonProxiableT:
+        if isinstance(obj, _NON_PROXIABLE_TYPES):
+            if skip_nonproxiable:
+                return obj
+            else:
+                raise NonProxiableTypeError(
+                    f'Object of {type(obj)} is not proxiable.',
+                )
+
+        with Timer() as timer:
+            key = self.put(obj, serializer=serializer, **kwargs)
+            # NOTE : This is a Streaming Factory
+            factory: StreamingFactory(StoreFactory, Generic[ConnectorT, T]) = StreamingFactory(
+                key,
+                store_config=self.config(),
+                deserializer=deserializer,
+                evict=evict,
+                metrics=self.metrics is not None,
+            )
+            proxy = StreamingProxy(factory)
+
+        if self.metrics is not None:
+            self.metrics.add_time('store.proxy', key, timer.elapsed_ns)
+
+        logger.debug(
+            f'Store(name="{self.name}"): PROXY {key} in '
+            f'{timer.elapsed_ms:.3f} ms',
+        )
+        return proxy, key
+
+    def append_to_stream(self,
+               obj: T, 
+               proxy_key: ConnectorKeyT,
+               *,
+               serializer: SerializerT | None = None,
+               **kwargs: Any) -> None:
+        if isinstance(obj, _NON_PROXIABLE_TYPES):
+            raise NonProxiableTypeError(
+                f'Object of {type(obj)} is not proxiable.',
+            )
+
+        if proxy_key is None:
+            raise TypeError(f'Proxy key cannot be nil')
+
+        timer = Timer()
+        timer.start()
+
+        with Timer() as serialize_timer:
+            if serializer is not None:
+                obj = serializer(obj)
+            else:
+                obj = self.serializer(obj)
+
+        if not isinstance(obj, bytes):
+            raise TypeError('Serializer must produce bytes.')
+
+        with Timer() as connector_timer:
+            self.connector.append(proxy_key, obj, **kwargs)
+
+        timer.stop()
+        if self.metrics is not None:
+            ctime = connector_timer.elapsed_ns
+            stime = serialize_timer.elapsed_ns
+            self.metrics.add_attribute('store.stream.object_size', proxy_key, len(obj))
+            self.metrics.add_time('store.stream.serialize', proxy_key, stime)
+            self.metrics.add_time('store.stream.connector', proxy_key, ctime)
+            self.metrics.add_time('store.stream', proxy_key, timer.elapsed_ns)
+
+        logger.debug(
+            f'Store(name="{self.name}"): STREAM {proxy_key} in '
+            f'{timer.elapsed_ms:.3f} ms',
+        )
 
     # This method has the same MyPy complaint as Store.proxy()
     @overload

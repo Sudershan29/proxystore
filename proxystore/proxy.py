@@ -209,3 +209,35 @@ class ProxyLocker(Generic[T]):
             Proxy object.
         """
         return super().__getattribute__('_proxy')
+
+class CachelessProxy(slots.Proxy):
+    """
+    NOTE: This is not the cleanest implementation, but it works for now because in case of streaming, there is no point in caching the information
+    i.e wrapping it with a lazy-loading proxy
+
+    Attempting:
+    1. Overloading __wrapped__ function by not save __target__ after calling the factory, therefore no-caching or lazy loading
+    
+    Alternatives:
+
+    1. Should attempt to modify __target__ call as follows
+
+        def new_target_function(self):
+            x  = get __target__
+            del self.__wrapped__
+            return x
+
+    """
+    @property
+    def __wrapped__(self, __getattr__=object.__getattribute__, __setattr__=object.__setattr__, __delattr__=object.__delattr__):
+        try:
+            factory = __getattr__(self, '__factory__')
+        except AttributeError:
+            raise ValueError("Proxy hasn't been initiated: __factory__ is missing.")
+        # __setattr__(self, '__target__', target)       NOTE: Not caching __target__ | https://github.com/ionelmc/python-lazy-object-proxy/blob/master/src/lazy_object_proxy/slots.py
+        return factory()
+
+# Copying the Proxy class, but modifying the Proxy
+class StreamingProxy(Proxy, CachelessProxy):
+    def __init__(self, factory: FactoryType[T]) -> None:
+        super().__init__(factory)

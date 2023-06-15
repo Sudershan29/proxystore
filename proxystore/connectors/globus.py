@@ -638,6 +638,9 @@ class GlobusConnector:
             for filename in filenames
         ]
 
+    def append(self, key: GlobusKey, obj: bytes) -> None:
+        raise NotImplementedError
+
 
 def _submit_transfer_action(
     client: globus_sdk.TransferClient,

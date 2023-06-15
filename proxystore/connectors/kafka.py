@@ -172,7 +172,7 @@ class KafkaConnector:
         """
         key = KafkaKey(kafka_key=str(uuid.uuid4()))
         self._producer_client.send(key.kafka_key, obj)
-        # self._producer_client.flush()
+        self._producer_client.flush() # TODO: Make it non-blocking
         return key
 
     def put_batch(self, objs: Sequence[bytes]) -> list[KafkaKey]:

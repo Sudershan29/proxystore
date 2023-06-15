@@ -275,3 +275,7 @@ class EndpointConnector:
             retrieve the objects.
         """
         return [self.put(obj) for obj in objs]
+
+
+    def append(self, key: EndpointKey, obj: bytes) -> None:
+        raise NotImplementedError

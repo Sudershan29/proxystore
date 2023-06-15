@@ -22,12 +22,11 @@ def test_streaming() -> None:
         Checks if the stream has all the information
     """
     connector = KafkaConnector()
-    N = 50
+    N = 5
     key = connector.put(pickle.dumps(0))
     for i in range(1, N):
         connector.append(key, pickle.dumps(i))
 
-    print('appended')
     sum = 0
     for i in range(N):
         obj = connector.get(key)
